@@ -5,92 +5,76 @@ import java.net.Socket;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.SequenceInputStream;
 import java.net.SocketException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-
+import java.util.LinkedList;
 
 
 public class Server
 {
-    ServerSocket server = null;
-    private int port;
-    private boolean isListening = false;
+    ServerListener listener;
+    ServerSocket server;
     
-    public Server(int port)
+    public Server(ServerListener listener)
     {
-        this.port = port;
+        this.listener = listener;
     }
     
-    public void listen(ServerListener listener)
+    public void listen(int port)
     {        
-        new Thread(() -> {
-
-            try (ServerSocket server = new ServerSocket(this.port))
-            {
-                this.server = server;
-
-                while (true)
-                {
-                    Socket connection = server.accept();
-                    
-                    new Thread(() -> {
-
-                        DataInputStream input = null;
-                        DataOutputStream output = null;
-
-                        String dataInput = "";
-                        String dataOutput = "";
-
-                        try {
-                            input = new DataInputStream(connection.getInputStream());
-                            output = new DataOutputStream(connection.getOutputStream());
-                        } catch (IOException e) {
-                            System.out.println("Error on creating DataStream: " + e);
-                        }
-
-                        try {
-                            if (input != null) dataInput = input.readUTF();
-                        } catch (IOException e) {
-                            System.out.println("Error on getting input data: " + e);
-                        }
-
-                        try {
-                            String data = listener.listen(dataInput);
-                            if (data != null) dataOutput = data;
-                        } catch (Exception e) {
-                            System.out.println("Error on listening port " + this.port + ": " + e);
-                        }
-
-                        try {
-                            if (output != null) output.writeUTF(dataOutput);
-                        } catch (IOException e) {
-                            System.out.println("Error on sending output data: " + e);
-                        }
-
-                        try {
-                            connection.close();
-                        } catch(IOException e) {
-                            System.out.println("Error on port " + this.port + " closing connection to port " + connection.getPort() + ":\n\t" + e);
-                        }
-
-                    }).start();
-                }
-
-            } catch(IOException e) {
-                System.out.println("Error on server: " + e);
-            }
-
-            this.server = null;
-        }).start();
+        executeInNewThread(() -> tryListenForConnections(port));
     }
 
-    public void close()
+    private void executeInNewThread(Runnable runnable)
     {
-        try {
-            if (server != null) server.close();
-        } catch (IOException e) {
-            System.out.println("Error on closing port " + this.port + ": " + e);
+        Thread thread = new Thread(runnable);
+        thread.start();
+    }
+    
+    private void tryListenForConnections(int port)
+    {
+        try
+        {
+            listenForConnections(port);
         }
+        catch (IOException e)
+        {
+            System.err.println("Error on opening socket for port " + port);
+        }
+    }
+
+    private void listenForConnections(int port) throws IOException
+    {
+        this.server = new ServerSocket(port);
+
+        while (true)
+            tryProcessNewConnection();
+    }
+
+    private void tryProcessNewConnection()
+    {
+        try 
+        {
+            processNewConnection();
+        }
+        catch (IOException e)
+        {
+            System.err.println("Error on making new connection");
+        }
+    }
+    
+    private void processNewConnection() throws IOException
+    {
+        Socket connection = server.accept();
+        executeInNewThread(() -> handleConnection(connection));
+    }
+
+    private void handleConnection(Socket connection)
+    {
+        ServerToClientConnector connector = new ServerToClientConnector(connection, listener);
+        connector.talk();
     }
 }

@@ -6,31 +6,35 @@ import app.tcp.Server;
 public class AppServer
 {
     Server server;
-    String url;
+    String clientUrl;
+    int MAX = 5;
     
     public AppServer(int port, int connection_port)
     {
-        this.url = "localhost:" + connection_port;
-        this.server = new Server(port);
+        this.clientUrl = "localhost:" + connection_port;
+        this.server = new Server((data) -> listenToConnections(data));
     }
     
-    public void launch(int MAX)
+    public void launch(int port)
     {        
-        server.listen((data) -> {
-            int num = Integer.parseInt(data) + 1;
-            data = Integer.toString(num);
+        server.listen(port);
+    }
+    
+    private String listenToConnections(String data)
+    {
+        int num = Integer.parseInt(data) + 1;
+        data = Integer.toString(num);
 
-            if (num < MAX)
-            {
-                Client client = Client.connect(this.url);
-                client.send(data);
-                client.response((response) -> {
-                    int n = Integer.parseInt(response);
-                    System.out.println(n);
-                });
-            }
-            
-            return data;
-        });
+        if (num < MAX)
+        {
+            Client client = Client.connect(this.clientUrl);
+            client.send(data);
+            client.response((response) -> {
+                int n = Integer.parseInt(response);
+                System.out.println(n);
+            });
+        }
+
+        return data;
     }
 }
